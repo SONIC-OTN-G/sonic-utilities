@@ -175,6 +175,7 @@ setup(
         'scripts/syseeprom-to-json',
         'scripts/teamd_increase_retry_count.py',
         'scripts/tempershow',
+        'scripts/thermalctl',
         'scripts/tunnelstat',
         'scripts/update_json.py',
         'scripts/sensorshow',

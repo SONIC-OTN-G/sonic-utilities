@@ -14531,3 +14531,47 @@ Enabled:            false
 Sampling Interval:  5
 Retention Period:   15
 ```
+
+## thermalctl
+
+Thermal sensor operations CLI (PMON platform layer). Part of the `psuutil`/`fanshow` family: command -> sonic_platform API (HalPlatformApi) -> hardware.
+
+### Display Thermal Sensors
+
+```bash
+admin@sonic:~$ sudo thermalctl show
+Sensor        Temp(C)    HighThr    LowThr  Warning    Timestamp
+------------  ---------  ---------  --------  ---------  -----------------
+System Board  37         71         10.4      False      20261021 07:10:21
+```
+
+### Set High Threshold
+
+```bash
+admin@sonic:~$ sudo thermalctl set-high-threshold "System Board" 35
+System Board high_threshold -> 35.0: OK
+```
+
+The daemon `thermalctld` picks up the new threshold on its next poll cycle and updates `TEMPERATURE_INFO` in STATE_DB (including `warning_status`).
+
+### Set Low Threshold
+
+```bash
+admin@sonic:~$ sudo thermalctl set-low-threshold "System Board" 5
+```
+
+## How this command was added (reference for adding a platform CLI command)
+
+`thermalctl` is a worked example of adding a new command to the platform CLI family. The pattern has 3 touch points:
+
+| Step | Where | What |
+|:--|:--|:--|
+| 1 | `scripts/thermalctl` | Standalone executable script (click CLI). Read path uses `SonicV2Connector` on STATE_DB (fanshow idiom); write path calls the platform API (`HalPlatformApi` client -> HAL server). |
+| 2 | `setup.py` `scripts` list | Register `'scripts/thermalctl',` -> the sonic-utilities deb installs it into `/usr/local/bin` inside the image. |
+| 3 | `doc/Command-Reference.md` | Document usage (this section). |
+
+Rebuild path: `make target/debs/sonic-utilities*.deb` (or a full image build) -> the command ships inside the image at `/usr/local/bin/thermalctl`.
+
+Notes:
+- The write path goes through the **platform API layer** (same layer the daemons use) - it is an operations tool, not a CONFIG_DB management-plane dispatch.
+- `thermalctld` polls `TEMPERATURE_INFO` with `--thermal-monitor-update-interval` (factory default 60s); the timestamp column is stamped by the daemon itself (`thermalctld` TemperatureUpdater, `datetime.now().strftime('%Y%m%d %H:%M:%S')`) on every write cycle.

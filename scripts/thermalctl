@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""
+    thermalctl - thermal sensor operations CLI (PMON platform layer)
+
+    Reference example for adding a platform CLI command:
+      1. Put this script under sonic-utilities/scripts/ (executable).
+      2. Register it in setup.py 'scripts' list -> lands in /usr/local/bin
+         inside the image via the sonic-utilities deb.
+      3. Document it in doc/Command-Reference.md.
+
+    Commands:
+      show               : STATE_DB TEMPERATURE_INFO view (fanshow idiom)
+      set-high-threshold : platform API write (HalPlatformApi -> HAL server)
+      set-low-threshold  : same as above
+"""
+
+import sys
+import click
+from tabulate import tabulate
+from natsort import natsorted
+from swsscommon.swsscommon import SonicV2Connector
+
+TEMP_TABLE = 'TEMPERATURE_INFO'
+
+
+def get_state_db():
+    db = SonicV2Connector(host='127.0.0.1')
+    db.connect(db.STATE_DB)
+    return db
+
+
+def get_hal():
+    from HalPlatformApi import client as hal
+    if not hal.Initialize():
+        click.echo('HAL init failed', err=True)
+        sys.exit(1)
+    return hal
+
+
+@click.group()
+def cli():
+    """thermalctl - thermal sensor operations (PMON platform layer)"""
+
+
+@cli.command()
+def show():
+    """Display thermal sensors (temperature & thresholds, from STATE_DB)"""
+    db = get_state_db()
+    keys = db.keys(db.STATE_DB, TEMP_TABLE + '|*')
+    if not keys:
+        click.echo('No thermal sensor detected')
+        return
+    rows = []
+    for key in natsorted(keys):
+        name = key.split('|', 1)[1]
+        d = db.get_all(db.STATE_DB, key)
+        rows.append([name, d.get('temperature'), d.get('high_threshold'),
+                     d.get('low_threshold'), d.get('warning_status'),
+                     d.get('timestamp')])
+    click.echo(tabulate(rows,
+                        headers=['Sensor', 'Temp(C)', 'HighThr', 'LowThr',
+                                 'Warning', 'Timestamp']))
+
+
+@cli.command()
+@click.argument('name')
+@click.argument('value', type=float)
+def set_high_threshold(name, value):
+    """Set high threshold of sensor NAME to VALUE (platform API write)"""
+    hal = get_hal()
+    ok = hal.ThermalSetHighThreshold(name, value)
+    click.echo('{} high_threshold -> {}: {}'.format(
+        name, value, 'OK' if ok else 'FAILED'))
+
+
+@cli.command()
+@click.argument('name')
+@click.argument('value', type=float)
+def set_low_threshold(name, value):
+    """Set low threshold of sensor NAME to VALUE (platform API write)"""
+    hal = get_hal()
+    ok = hal.ThermalSetLowThreshold(name, value)
+    click.echo('{} low_threshold -> {}: {}'.format(
+        name, value, 'OK' if ok else 'FAILED'))
+
+
+if __name__ == '__main__':
+    cli()
